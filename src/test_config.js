@@ -9,7 +9,7 @@ module.exports = {
   LEETCODE_SESSION: process.env.LEETCODE_SESSION,
 
   // These parameters are optional and have default values if needed.
-  FILTER_DUPLICATE_SECS: process.env.FILTER_DUPLICATE_SECS ?? 86400,
+  FILTER_DUPLICATE_SECS: process.env.FILTER_DUPLICATE_SECS ?? 315569520, // 10 years
   DESTINATION_FOLDER: process.env.DESTINATION_FOLDER ?? "",
   VERBOSE: process.env.VERBOSE ?? true,
   COMMIT_HEADER: process.env.COMMIT_HEADER ?? "Sync LeetCode submission",

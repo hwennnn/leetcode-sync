@@ -14490,6 +14490,9 @@ function wrappy (fn, cb) {
 const axios = __nccwpck_require__(8757);
 const { Octokit } = __nccwpck_require__(5375);
 const path = __nccwpck_require__(1017);
+const fs = (__nccwpck_require__(7147).promises);
+
+const { generateContent } = __nccwpck_require__(5945);
 
 const COMMIT_MESSAGE = "Sync LeetCode submission";
 const LANG_TO_EXTENSION = {
@@ -14519,6 +14522,34 @@ const LANG_TO_EXTENSION = {
   swift: "swift",
   typescript: "ts",
 };
+const LANG_TO_FULL_NAME = {
+  bash: "Bash",
+  c: "C",
+  cpp: "C++",
+  csharp: "C#",
+  dart: "Dart",
+  elixir: "Elixir",
+  erlang: "Erlang",
+  golang: "Go",
+  java: "Java",
+  javascript: "JavaScript",
+  kotlin: "Kotlin",
+  mssql: "MS SQL",
+  mysql: "MySQL",
+  oraclesql: "Oracle SQL",
+  php: "PHP",
+  python: "Python",
+  python3: "Python",
+  pythondata: "Python",
+  postgresql: "PostgreSQL",
+  racket: "Racket",
+  ruby: "Ruby",
+  rust: "Rust",
+  scala: "Scala",
+  swift: "Swift",
+  typescript: "TypeScript"
+};
+
 const BASE_URL = "https://leetcode.com";
 
 const delay = (ms) => new Promise((res) => setTimeout(res, ms));
@@ -14559,6 +14590,7 @@ async function getInfo(submission, session, csrfToken) {
         runtimePercentile
         memoryPercentile
         code
+        timestamp
         question {
           questionId
         }
@@ -14579,13 +14611,13 @@ async function getInfo(submission, session, csrfToken) {
 
       const runtimePercentile =
         submissionDetails.runtimePercentile !== null &&
-        submissionDetails.runtimePercentile !== undefined
+          submissionDetails.runtimePercentile !== undefined
           ? `${submissionDetails.runtimePercentile.toFixed(2)}%`
           : "N/A";
 
       const memoryPercentile =
         submissionDetails.memoryPercentile !== null &&
-        submissionDetails.memoryPercentile !== undefined
+          submissionDetails.memoryPercentile !== undefined
           ? `${submissionDetails.memoryPercentile.toFixed(2)}%`
           : "N/A";
 
@@ -14611,8 +14643,8 @@ async function getInfo(submission, session, csrfToken) {
       }
       log(
         "Error fetching submission info, retrying in " +
-          3 ** retryCount +
-          " seconds..."
+        3 ** retryCount +
+        " seconds..."
       );
       await delay(3 ** retryCount * 1000);
       return getInfo(maxRetries, retryCount + 1);
@@ -14625,94 +14657,71 @@ async function getInfo(submission, session, csrfToken) {
 
 async function commit(params) {
   const {
-    octokit,
-    owner,
-    repo,
-    defaultBranch,
-    commitInfo,
-    treeSHA,
-    latestCommitSHA,
     submission,
     destinationFolder,
-    commitHeader,
     questionData,
   } = params;
-
-  const name = normalizeName(submission.title);
-  log(`Committing solution for ${name}...`);
+  const name = submission.title;
+  log(`Saving solution for ${name}...`);
 
   if (!LANG_TO_EXTENSION[submission.lang]) {
     throw `Language ${submission.lang} does not have a registered extension.`;
   }
 
-  const prefix = !!destinationFolder ? destinationFolder : "";
-  const commitName = !!commitHeader ? commitHeader : COMMIT_MESSAGE;
+  const prefix = !!destinationFolder ? destinationFolder : "problems";
 
   if ("runtimePerc" in submission) {
-    message = `${commitName} - ${submission.title} - Runtime - ${submission.runtime} (${submission.runtimePerc}), Memory - ${submission.memory} (${submission.memoryPerc})`;
     qid = `${submission.qid}-`;
   } else {
-    message = `${commitName} - ${submission.title} - Runtime - ${submission.runtime}, Memory - ${submission.memory}`;
     qid = "";
   }
-  const folderName = `${qid}${name}`;
-  // Markdown file for the problem with question data
-  const questionPath = path.join(prefix, folderName, "README.md");
 
-  // Separate file for the solution
-  const solutionFileName = `solution.${LANG_TO_EXTENSION[submission.lang]}`;
-  const solutionPath = path.join(prefix, folderName, solutionFileName);
+  if (!questionData) {
+    throw "Unable to fetch the Problem statement for " + name;
+  }
 
-  const treeData = [
-    {
-      path: path.normalize(questionPath),
-      mode: "100644",
-      content: questionData ?? "Unable to fetch the Problem statement.",
-    },
-    {
-      path: path.normalize(solutionPath),
-      mode: "100644",
-      content: `${submission.code}\n`, // Adds newline at EOF to conform to git recommendations
-    },
-  ];
+  const fullPath = path.join(process.cwd(), prefix);
 
-  const treeResponse = await octokit.git.createTree({
-    owner: owner,
-    repo: repo,
-    base_tree: treeSHA,
-    tree: treeData,
-  });
+  // Create folder if it doesn't exist
+  await fs.mkdir(fullPath, { recursive: true });
 
-  const date = new Date(Number(submission.timestamp) * 1000).toISOString();
-  const commitResponse = await octokit.git.createCommit({
-    owner: owner,
-    repo: repo,
-    message: message,
-    tree: treeResponse.data.sha,
-    parents: [latestCommitSHA],
-    author: {
-      email: commitInfo.email,
-      name: commitInfo.name,
-      date: date,
-    },
-    committer: {
-      email: commitInfo.email,
-      name: commitInfo.name,
-      date: date,
-    },
-  });
+  const language = LANG_TO_EXTENSION[submission.lang]
+  const code = `${submission.code}\n`
 
-  await octokit.git.updateRef({
-    owner: owner,
-    repo: repo,
-    sha: commitResponse.data.sha,
-    ref: "heads/" + defaultBranch,
-    force: true,
-  });
+  const submissionTime = new Date(submission.timestamp * 1000).toLocaleDateString('en-SG', {
+    timeZone: 'Asia/Singapore',
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit'
+  }).split('/').reverse().join('-');
+  const problemID = questionData["questionFrontendId"]
+  const problemTitle = questionData["questionTitle"]
+  const problemSlug = questionData["questionTitleSlug"]
+  const problemDescription = questionData["content"]
+  const problemDifficulty = questionData["difficulty"]
+  const problemTopics = questionData["topicTags"]
+  const fullName = `${problemID}-${name}`;
+  const languageFullName = LANG_TO_FULL_NAME[submission.lang]
 
-  log(`Committed solution for ${name}`);
+  const generatedContent = await generateContent(
+    problemID,
+    problemTitle,
+    problemSlug,
+    problemDescription,
+    code,
+    problemDifficulty,
+    problemTopics,
+    language,
+    submissionTime,
+    languageFullName
+  )
 
-  return [treeResponse.data.sha, commitResponse.data.sha];
+  // Save md file
+  const solutionFileName = `${fullName}.md`
+  const solutionPath = path.join(fullPath, solutionFileName);
+  await fs.writeFile(solutionPath, generatedContent);
+
+  log(`Saved solution for ${name}`);
 }
 
 async function getQuestionData(titleSlug, leetcodeSession, csrfToken) {
@@ -14723,6 +14732,14 @@ async function getQuestionData(titleSlug, leetcodeSession, csrfToken) {
     query: `query getQuestionDetail($titleSlug: String!) {
       question(titleSlug: $titleSlug) {
         content
+        difficulty
+        questionTitleSlug
+        questionTitle
+        questionFrontendId
+        topicTags {
+          name
+          slug
+        }
       }
     }`,
     variables: { titleSlug: titleSlug },
@@ -14735,7 +14752,7 @@ async function getQuestionData(titleSlug, leetcodeSession, csrfToken) {
       { headers }
     );
     const result = await response.data;
-    return result.data.question.content;
+    return result.data.question;
   } catch (error) {
     // If problem is locked due to user not having LeetCode Premium
     if (error.response && error.response.status === 403) {
@@ -14782,53 +14799,44 @@ function addToSubmissions(params) {
   return true;
 }
 
+const TIMESTAMP_FILE = 'last_timestamp.json';
+
+async function getLastTimestamp() {
+  try {
+    const data = await fs.readFile(TIMESTAMP_FILE, 'utf8');
+    const timestamp = JSON.parse(data).lastTimestamp;
+    log(`Retrieved last timestamp: ${timestamp}`);
+    return timestamp;
+  } catch (error) {
+    log('No previous timestamp found, starting from 0');
+    return 0;
+  }
+}
+
+async function updateLastTimestamp(timestamp) {
+  try {
+    await fs.writeFile(TIMESTAMP_FILE, JSON.stringify({ lastTimestamp: timestamp }, null, 2));
+    log(`Updated last timestamp to: ${timestamp}`);
+  } catch (error) {
+    console.error('Error updating timestamp:', error);
+  }
+}
+
 async function sync(inputs) {
   const {
-    githubToken,
-    owner,
-    repo,
     leetcodeCSRFToken,
     leetcodeSession,
     filterDuplicateSecs,
     destinationFolder,
     verbose,
-    commitHeader,
   } = inputs;
 
-  const octokit = new Octokit({
-    auth: githubToken,
-    userAgent: "LeetCode sync to GitHub - GitHub Action",
-  });
-  // First, get the time the timestamp for when the syncer last ran.
-  const commits = await octokit.repos.listCommits({
-    owner: owner,
-    repo: repo,
-    per_page: 100,
-  });
-
-  let lastTimestamp = 0;
-  // commitInfo is used to get the original name / email to use for the author / committer.
-  // Since we need to modify the commit time, we can't use the default settings for the
-  // authenticated user.
-  let commitInfo = commits.data[commits.data.length - 1].commit.author;
-  for (const commit of commits.data) {
-    if (
-      !commit.commit.message.startsWith(
-        !!commitHeader ? commitHeader : COMMIT_MESSAGE
-      )
-    ) {
-      continue;
-    }
-    commitInfo = commit.commit.author;
-    lastTimestamp = Date.parse(commit.commit.committer.date) / 1000;
-    break;
-  }
-
-  // Get all Accepted submissions from LeetCode greater than the timestamp.
+  let lastTimestamp = await getLastTimestamp();
   let response = null;
   let offset = 0;
   const submissions = [];
   const submissions_dict = {};
+
   do {
     log(`Getting submission from LeetCode, offset ${offset}`);
 
@@ -14872,8 +14880,8 @@ async function sync(inputs) {
         }
         log(
           "Error fetching submissions, retrying in " +
-            3 ** retryCount +
-            " seconds..."
+          3 ** retryCount +
+          " seconds..."
         );
         // There's a rate limit on LeetCode API, so wait with backoff before retrying.
         await delay(3 ** retryCount * 1000);
@@ -14900,22 +14908,15 @@ async function sync(inputs) {
       break;
     }
 
-    offset += 20;
-  } while (response.data.data.submissionList.hasNext);
+    if (offset === 0) {
+      const recordedLastTimestamp = Number(response.data.data.submissionList.submissions[0].timestamp * 1000);
+      await updateLastTimestamp(recordedLastTimestamp);
+    }
 
-  // We have all submissions we want to write to GitHub now.
-  // First, get the default branch to write to.
-  const repoInfo = await octokit.repos.get({
-    owner: owner,
-    repo: repo,
-  });
-  const defaultBranch = repoInfo.data.default_branch;
-  log(`Default branch for ${owner}/${repo}: ${defaultBranch}`);
-  // Write in reverse order (oldest first), so that if there's errors, the last sync time
-  // is still valid.
+    offset += 20;
+  } while (false);
+
   log(`Syncing ${submissions.length} submissions...`);
-  let latestCommitSHA = commits.data[0].sha;
-  let treeSHA = commits.data[0].commit.tree.sha;
   for (i = submissions.length - 1; i >= 0; i--) {
     submission = await getInfo(
       submissions[i],
@@ -14938,17 +14939,9 @@ async function sync(inputs) {
       // Skip this submission if question data is null (locked problem)
       continue;
     }
-    [treeSHA, latestCommitSHA] = await commit({
-      octokit,
-      owner,
-      repo,
-      defaultBranch,
-      commitInfo,
-      treeSHA,
-      latestCommitSHA,
+    await commit({
       submission,
       destinationFolder,
-      commitHeader,
       questionData,
     });
   }
@@ -14957,6 +14950,62 @@ async function sync(inputs) {
 
 module.exports = { log, sync };
 
+
+/***/ }),
+
+/***/ 5945:
+/***/ ((module, __unused_webpack_exports, __nccwpck_require__) => {
+
+const fs = (__nccwpck_require__(7147).promises);
+
+async function generateContent(
+    problemID,
+    problemTitle,
+    problemSlug,
+    problemDescription,
+    code,
+    problemDifficulty,
+    problemTopics,
+    language,
+    submissionTime,
+    languageFullName
+) {
+    let contents = "";
+    try {
+        contents = await fs.readFile("templates/PROBLEM_TEMPLATE.md", "utf8");
+
+        contents = contents.replace("{PROBLEM_ID}", problemID)
+            .replace("{PROBLEM_TITLE}", problemTitle)
+            .replace("{PROBLEM_SLUG}", problemSlug)
+            .replace("{PROBLEM_DESCRIPTION}", problemDescription)
+            .replace("{SUBMISSION_TIME}", submissionTime);
+
+        const difficulty_badge = `https://img.shields.io/badge/Difficulty-${problemDifficulty}-blue.svg`;
+        contents = contents.replace("PROBLEM_DIFFICULTY", difficulty_badge);
+
+        const formattedTopicsTags = problemTopics
+            .map(topic => `  - ${topic.name.toLowerCase().replace(/ /g, '-')}`)
+            .join('\n');
+        contents = contents.replace("{PROBLEM_TOPICS}", "\n" + formattedTopicsTags);
+
+        const codeTemplate = "### {LANGUAGE_FULL_NAME}\n``` {LANGUAGE} title='{PROBLEM_SLUG}'\n{CODE}\n```\n";
+        let solution = codeTemplate
+            .replace(/{PROBLEM_SLUG}/g, problemSlug)
+            .replace(/{LANGUAGE}/g, language)
+            .replace(/{LANGUAGE_FULL_NAME}/g, languageFullName)
+            .replace("{CODE}", code);
+
+        contents = contents.replace("{PROBLEM_SOLUTION}", solution);
+
+    } catch (error) {
+        console.error("Error:", error);
+        process.exit(1);
+    }
+
+    return contents;
+}
+
+module.exports = { generateContent };
 
 /***/ }),
 
@@ -14974,7 +15023,7 @@ module.exports = {
   LEETCODE_SESSION: process.env.LEETCODE_SESSION,
 
   // These parameters are optional and have default values if needed.
-  FILTER_DUPLICATE_SECS: process.env.FILTER_DUPLICATE_SECS ?? 86400,
+  FILTER_DUPLICATE_SECS: process.env.FILTER_DUPLICATE_SECS ?? 315569520, // 10 years
   DESTINATION_FOLDER: process.env.DESTINATION_FOLDER ?? "",
   VERBOSE: process.env.VERBOSE ?? true,
   COMMIT_HEADER: process.env.COMMIT_HEADER ?? "Sync LeetCode submission",
