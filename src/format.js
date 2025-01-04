@@ -1,16 +1,69 @@
 const fs = require('fs').promises;
 
+const LANG_TO_EXTENSION = {
+    bash: "sh",
+    c: "c",
+    cpp: "cpp",
+    csharp: "cs",
+    dart: "dart",
+    elixir: "ex",
+    erlang: "erl",
+    golang: "go",
+    java: "java",
+    javascript: "js",
+    kotlin: "kt",
+    mssql: "sql",
+    mysql: "sql",
+    oraclesql: "sql",
+    php: "php",
+    python: "py",
+    python3: "py",
+    pythondata: "py",
+    postgresql: "sql",
+    racket: "rkt",
+    ruby: "rb",
+    rust: "rs",
+    scala: "scala",
+    swift: "swift",
+    typescript: "ts",
+};
+const LANG_TO_FULL_NAME = {
+    bash: "Bash",
+    c: "C",
+    cpp: "C++",
+    csharp: "C#",
+    dart: "Dart",
+    elixir: "Elixir",
+    erlang: "Erlang",
+    golang: "Go",
+    java: "Java",
+    javascript: "JavaScript",
+    kotlin: "Kotlin",
+    mssql: "MS SQL",
+    mysql: "MySQL",
+    oraclesql: "Oracle SQL",
+    php: "PHP",
+    python: "Python",
+    python3: "Python",
+    pythondata: "Python",
+    postgresql: "PostgreSQL",
+    racket: "Racket",
+    ruby: "Ruby",
+    rust: "Rust",
+    scala: "Scala",
+    swift: "Swift",
+    typescript: "TypeScript"
+};
+
 async function generateContent(
     problemID,
     problemTitle,
     problemSlug,
     problemDescription,
-    code,
     problemDifficulty,
     problemTopics,
-    language,
-    submissionTime,
-    languageFullName
+    createdAt,
+    submissions
 ) {
     let contents = "";
     try {
@@ -20,22 +73,24 @@ async function generateContent(
             .replace("{PROBLEM_TITLE}", problemTitle)
             .replace("{PROBLEM_SLUG}", problemSlug)
             .replace("{PROBLEM_DESCRIPTION}", problemDescription)
-            .replace("{SUBMISSION_TIME}", submissionTime);
+            .replace("{CREATED_AT}", createdAt)
 
-        const difficulty_badge = `https://img.shields.io/badge/Difficulty-${problemDifficulty}-blue.svg`;
-        contents = contents.replace("PROBLEM_DIFFICULTY", difficulty_badge);
+        const difficultyTag = `leetcode-${problemDifficulty.toLowerCase()}`;
 
-        const formattedTopicsTags = problemTopics
-            .map(topic => `  - ${topic.name.toLowerCase().replace(/ /g, '-')}`)
+        const formattedTopicsTags = [difficultyTag, ...problemTopics.map(topic => topic.slug)]
+            .map(topic => `  - ${topic}`)
             .join('\n');
         contents = contents.replace("{PROBLEM_TOPICS}", "\n" + formattedTopicsTags);
 
-        const codeTemplate = "### {LANGUAGE_FULL_NAME}\n``` {LANGUAGE} title='{PROBLEM_SLUG}'\n{CODE}\n```\n";
-        let solution = codeTemplate
-            .replace(/{PROBLEM_SLUG}/g, problemSlug)
-            .replace(/{LANGUAGE}/g, language)
-            .replace(/{LANGUAGE_FULL_NAME}/g, languageFullName)
-            .replace("{CODE}", code);
+        let solution = "";
+        for (const submission of submissions) {
+            const codeTemplate = "### {LANGUAGE_FULL_NAME}\n``` {LANGUAGE} title='{PROBLEM_SLUG}'\n{CODE}\n```\n";
+            solution += codeTemplate
+                .replace(/{PROBLEM_SLUG}/g, problemSlug)
+                .replace(/{LANGUAGE}/g, LANG_TO_EXTENSION[submission.lang])
+                .replace(/{LANGUAGE_FULL_NAME}/g, LANG_TO_FULL_NAME[submission.lang])
+                .replace("{CODE}", submission.code);
+        }
 
         contents = contents.replace("{PROBLEM_SOLUTION}", solution);
 

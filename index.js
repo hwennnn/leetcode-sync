@@ -1,7 +1,5 @@
 const action = require("./src/action");
 const config = require("./src/test_config");
-const core = require("@actions/core");
-const { context } = require("@actions/github");
 
 const TEST_MODE = process.argv.includes("test");
 
@@ -39,6 +37,7 @@ async function main() {
     commitHeader = core.getInput("commit-header");
   }
 
+  // first write to processed-submissions.json
   await action.sync({
     githubToken,
     owner,
@@ -49,6 +48,11 @@ async function main() {
     destinationFolder,
     verbose,
     commitHeader,
+  });
+
+  // then read from processed-submissions.json and generate the markdown files
+  await action.syncFromProcessedSubmissions({
+    destinationFolder,
   });
 }
 

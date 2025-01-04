@@ -1,65 +1,8 @@
 const axios = require("axios");
-const { Octokit } = require("@octokit/rest");
 const path = require("path");
 const fs = require('fs').promises;
 
 const { generateContent } = require("./format");
-
-const COMMIT_MESSAGE = "Sync LeetCode submission";
-const LANG_TO_EXTENSION = {
-  bash: "sh",
-  c: "c",
-  cpp: "cpp",
-  csharp: "cs",
-  dart: "dart",
-  elixir: "ex",
-  erlang: "erl",
-  golang: "go",
-  java: "java",
-  javascript: "js",
-  kotlin: "kt",
-  mssql: "sql",
-  mysql: "sql",
-  oraclesql: "sql",
-  php: "php",
-  python: "py",
-  python3: "py",
-  pythondata: "py",
-  postgresql: "sql",
-  racket: "rkt",
-  ruby: "rb",
-  rust: "rs",
-  scala: "scala",
-  swift: "swift",
-  typescript: "ts",
-};
-const LANG_TO_FULL_NAME = {
-  bash: "Bash",
-  c: "C",
-  cpp: "C++",
-  csharp: "C#",
-  dart: "Dart",
-  elixir: "Elixir",
-  erlang: "Erlang",
-  golang: "Go",
-  java: "Java",
-  javascript: "JavaScript",
-  kotlin: "Kotlin",
-  mssql: "MS SQL",
-  mysql: "MySQL",
-  oraclesql: "Oracle SQL",
-  php: "PHP",
-  python: "Python",
-  python3: "Python",
-  pythondata: "Python",
-  postgresql: "PostgreSQL",
-  racket: "Racket",
-  ruby: "Ruby",
-  rust: "Rust",
-  scala: "Scala",
-  swift: "Swift",
-  typescript: "TypeScript"
-};
 
 const BASE_URL = "https://leetcode.com";
 
@@ -168,27 +111,21 @@ async function getInfo(submission, session, csrfToken) {
 
 async function commit(params) {
   const {
-    submission,
+    submissions,
     destinationFolder,
     questionData,
   } = params;
-  const name = submission.title;
-  log(`Saving solution for ${name}...`);
-
-  if (!LANG_TO_EXTENSION[submission.lang]) {
-    throw `Language ${submission.lang} does not have a registered extension.`;
+  if (!submissions) {
+    throw "No submissions found";
   }
+
+  const normalizedName = questionData["questionTitleSlug"];
+  log(`Saving solution for ${normalizedName}...`);
 
   const prefix = !!destinationFolder ? destinationFolder : "problems";
 
-  if ("runtimePerc" in submission) {
-    qid = `${submission.qid}-`;
-  } else {
-    qid = "";
-  }
-
   if (!questionData) {
-    throw "Unable to fetch the Problem statement for " + name;
+    throw "Unable to fetch the Problem statement for " + normalizedName;
   }
 
   const fullPath = path.join(process.cwd(), prefix);
@@ -196,35 +133,36 @@ async function commit(params) {
   // Create folder if it doesn't exist
   await fs.mkdir(fullPath, { recursive: true });
 
-  const language = LANG_TO_EXTENSION[submission.lang]
-  const code = `${submission.code}\n`
-
-  const submissionTime = new Date(submission.timestamp * 1000).toLocaleDateString('en-SG', {
+  const submissionsTimestamp = submissions.map(submission => submission.timestamp)
+  const createdAt = new Date(Math.min(...submissionsTimestamp) * 1000).toLocaleDateString('en-SG', {
     timeZone: 'Asia/Singapore',
     year: 'numeric',
     month: '2-digit',
     day: '2-digit'
   }).split('/').reverse().join('-');
+
   const problemID = questionData["questionFrontendId"]
   const problemTitle = questionData["questionTitle"]
   const problemSlug = questionData["questionTitleSlug"]
   const problemDescription = questionData["content"]
   const problemDifficulty = questionData["difficulty"]
   const problemTopics = questionData["topicTags"]
-  const fullName = `${problemID}-${name}`;
-  const languageFullName = LANG_TO_FULL_NAME[submission.lang]
+  const fullName = `${problemID}-${normalizedName}`;
+
+  if (fullName === "2917-find-the-k-or-of-an-array") {
+    log("Skipping problem 2917-find-the-k-or-of-an-array");
+    return;
+  }
 
   const generatedContent = await generateContent(
     problemID,
     problemTitle,
     problemSlug,
     problemDescription,
-    code,
     problemDifficulty,
     problemTopics,
-    language,
-    submissionTime,
-    languageFullName
+    createdAt,
+    submissions
   )
 
   // Save md file
@@ -232,7 +170,7 @@ async function commit(params) {
   const solutionPath = path.join(fullPath, solutionFileName);
   await fs.writeFile(solutionPath, generatedContent);
 
-  log(`Saved solution for ${name}`);
+  log(`Saved solution for ${normalizedName}`);
 }
 
 async function getQuestionData(titleSlug, leetcodeSession, csrfToken) {
@@ -338,8 +276,6 @@ async function sync(inputs) {
     leetcodeCSRFToken,
     leetcodeSession,
     filterDuplicateSecs,
-    destinationFolder,
-    verbose,
   } = inputs;
 
   let lastTimestamp = await getLastTimestamp();
@@ -425,11 +361,13 @@ async function sync(inputs) {
     }
 
     offset += 20;
-  } while (false);
+  } while (response.data.data.submissionList.hasNext);
 
+  const processedSubmissions = await retrieveProcessedSubmissions();
   log(`Syncing ${submissions.length} submissions...`);
-  for (i = submissions.length - 1; i >= 0; i--) {
-    submission = await getInfo(
+
+  for (i = 0; i < submissions.length; i++) {
+    let submission = await getInfo(
       submissions[i],
       leetcodeSession,
       leetcodeCSRFToken
@@ -450,13 +388,93 @@ async function sync(inputs) {
       // Skip this submission if question data is null (locked problem)
       continue;
     }
+
+    // Initialize map for this problem if it doesn't exist
+    if (!processedSubmissions.has(submission.titleSlug)) {
+      processedSubmissions.set(submission.titleSlug, {
+        questionData,
+        submissions: new Map() // lang -> submission
+      });
+    }
+
+    const problemData = processedSubmissions.get(submission.titleSlug);
+
+    // Update submission for this language if it's newer
+    const existingSubmission = problemData.submissions.get(submission.lang);
+    if (!existingSubmission ||
+      Number(submission.timestamp) > Number(existingSubmission.timestamp)) {
+      problemData.submissions.set(submission.lang, submission);
+      log(`Added/Updated submission for ${submission.titleSlug} in ${submission.lang}`);
+    } else {
+      log(`Skipping older submission for ${submission.titleSlug} in ${submission.lang}`);
+    }
+  }
+
+  // Dump processed submissions to JSON file
+  const processedData = Object.fromEntries(
+    Array.from(processedSubmissions.entries()).map(([titleSlug, data]) => [
+      titleSlug,
+      {
+        questionData: data.questionData,
+        submissions: Object.fromEntries(data.submissions)
+      }
+    ])
+  );
+
+  await fs.writeFile(
+    'processed-submissions.json',
+    JSON.stringify(processedData, null, 2)
+  );
+
+  log("Done syncing all submissions.");
+}
+
+async function retrieveProcessedSubmissions() {
+  log('Reading from processed-submissions.json...');
+  let processedData = {};
+  try {
+    const rawData = await fs.readFile('processed-submissions.json', 'utf8');
+    processedData = JSON.parse(rawData);
+  } catch (error) {
+    log('Error reading processed-submissions.json: ' + error.message);
+    return;
+  }
+
+  log(`Processing submissions from processed-submissions.json...`);
+
+  // Convert the processed data back into the Map structure
+  const processedSubmissions = new Map();
+  for (const [titleSlug, data] of Object.entries(processedData)) {
+    const submissionsMap = new Map();
+    for (const [lang, submission] of Object.entries(data.submissions)) {
+      submissionsMap.set(lang, submission);
+    }
+    processedSubmissions.set(titleSlug, {
+      questionData: data.questionData,
+      submissions: submissionsMap
+    });
+  }
+
+  return processedSubmissions;
+}
+
+async function syncFromProcessedSubmissions(inputs) {
+  const { destinationFolder } = inputs;
+
+  const processedSubmissions = await retrieveProcessedSubmissions();
+
+  // Process all collected submissions
+  for (const [titleSlug, problemData] of processedSubmissions) {
+    const { questionData, submissions } = problemData;
+
     await commit({
-      submission,
+      submissions: Array.from(submissions.values()),
       destinationFolder,
       questionData,
     });
   }
-  log("Done syncing all submissions.");
+
+  log("Done processing submissions from processed-submissions.json");
 }
 
-module.exports = { log, sync };
+module.exports = { log, sync, syncFromProcessedSubmissions };

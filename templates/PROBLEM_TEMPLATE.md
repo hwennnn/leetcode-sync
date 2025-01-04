@@ -2,10 +2,10 @@
 title: {PROBLEM_ID}. {PROBLEM_TITLE}
 draft: false
 tags: {PROBLEM_TOPICS}
-date: {SUBMISSION_TIME}
+date: {CREATED_AT}
 ---
 
-![Difficulty](PROBLEM_DIFFICULTY)
+[Problem Link](https://leetcode.com/problems/{PROBLEM_SLUG}/)
 
 ## Description
 
