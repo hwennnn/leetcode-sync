@@ -168,9 +168,15 @@ async function commit(params) {
   // Save md file
   const solutionFileName = `${fullName}.md`
   const solutionPath = path.join(fullPath, solutionFileName);
-  await fs.writeFile(solutionPath, generatedContent);
-
-  log(`Saved solution for ${normalizedName}`);
+  try {
+    await fs.access(solutionPath);
+    log(`Skipping existing solution for ${normalizedName}`);
+    return;
+  } catch {
+    // File doesn't exist, continue with writing
+    await fs.writeFile(solutionPath, generatedContent);
+    log(`Saved solution for ${normalizedName}`);
+  }
 }
 
 async function getQuestionData(titleSlug, leetcodeSession, csrfToken) {
@@ -277,7 +283,6 @@ async function sync(inputs) {
     leetcodeSession,
     filterDuplicateSecs,
   } = inputs;
-
   let lastTimestamp = await getLastTimestamp();
   let response = null;
   let offset = 0;
@@ -343,6 +348,12 @@ async function sync(inputs) {
       await delay(1000);
     }
     response = await getSubmissions(maxRetries);
+
+    if (offset === 0) {
+      const recordedLastTimestamp = Number(response.data.data.submissionList.submissions[0].timestamp * 1000);
+      await updateLastTimestamp(recordedLastTimestamp);
+    }
+
     if (
       !addToSubmissions({
         response,
@@ -353,11 +364,6 @@ async function sync(inputs) {
       })
     ) {
       break;
-    }
-
-    if (offset === 0) {
-      const recordedLastTimestamp = Number(response.data.data.submissionList.submissions[0].timestamp * 1000);
-      await updateLastTimestamp(recordedLastTimestamp);
     }
 
     offset += 20;

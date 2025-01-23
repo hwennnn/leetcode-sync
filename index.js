@@ -2,6 +2,7 @@ const action = require("./src/action");
 const config = require("./src/test_config");
 
 const TEST_MODE = process.argv.includes("test");
+const SYNC = process.argv.includes("sync");
 
 async function main() {
   let githubToken, owner, repo, leetcodeCSRFToken, leetcodeSession;
@@ -37,18 +38,20 @@ async function main() {
     commitHeader = core.getInput("commit-header");
   }
 
-  // first write to processed-submissions.json
-  await action.sync({
-    githubToken,
-    owner,
-    repo,
-    leetcodeCSRFToken,
-    leetcodeSession,
-    filterDuplicateSecs,
-    destinationFolder,
-    verbose,
-    commitHeader,
-  });
+  if (SYNC) {
+    // first write to processed-submissions.jsons
+    await action.sync({
+      githubToken,
+      owner,
+      repo,
+      leetcodeCSRFToken,
+      leetcodeSession,
+      filterDuplicateSecs,
+      destinationFolder,
+      verbose,
+      commitHeader,
+    });
+  }
 
   // then read from processed-submissions.json and generate the markdown files
   await action.syncFromProcessedSubmissions({

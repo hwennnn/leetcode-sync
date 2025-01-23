@@ -2862,9 +2862,15 @@ async function commit(params) {
   // Save md file
   const solutionFileName = `${fullName}.md`
   const solutionPath = path.join(fullPath, solutionFileName);
-  await fs.writeFile(solutionPath, generatedContent);
-
-  log(`Saved solution for ${normalizedName}`);
+  try {
+    await fs.access(solutionPath);
+    log(`Skipping existing solution for ${normalizedName}`);
+    return;
+  } catch {
+    // File doesn't exist, continue with writing
+    await fs.writeFile(solutionPath, generatedContent);
+    log(`Saved solution for ${normalizedName}`);
+  }
 }
 
 async function getQuestionData(titleSlug, leetcodeSession, csrfToken) {
@@ -2971,7 +2977,6 @@ async function sync(inputs) {
     leetcodeSession,
     filterDuplicateSecs,
   } = inputs;
-
   let lastTimestamp = await getLastTimestamp();
   let response = null;
   let offset = 0;
@@ -3037,6 +3042,12 @@ async function sync(inputs) {
       await delay(1000);
     }
     response = await getSubmissions(maxRetries);
+
+    if (offset === 0) {
+      const recordedLastTimestamp = Number(response.data.data.submissionList.submissions[0].timestamp * 1000);
+      await updateLastTimestamp(recordedLastTimestamp);
+    }
+
     if (
       !addToSubmissions({
         response,
@@ -3047,11 +3058,6 @@ async function sync(inputs) {
       })
     ) {
       break;
-    }
-
-    if (offset === 0) {
-      const recordedLastTimestamp = Number(response.data.data.submissionList.submissions[0].timestamp * 1000);
-      await updateLastTimestamp(recordedLastTimestamp);
     }
 
     offset += 20;
@@ -3225,8 +3231,8 @@ const LANG_TO_FULL_NAME = {
     oraclesql: "Oracle SQL",
     php: "PHP",
     python: "Python",
-    python3: "Python",
-    pythondata: "Python",
+    python3: "Python3",
+    pythondata: "Python Data",
     postgresql: "PostgreSQL",
     racket: "Racket",
     ruby: "Ruby",
@@ -7838,6 +7844,7 @@ const action = __nccwpck_require__(348);
 const config = __nccwpck_require__(811);
 
 const TEST_MODE = process.argv.includes("test");
+const SYNC = process.argv.includes("sync");
 
 async function main() {
   let githubToken, owner, repo, leetcodeCSRFToken, leetcodeSession;
@@ -7873,18 +7880,20 @@ async function main() {
     commitHeader = core.getInput("commit-header");
   }
 
-  // first write to processed-submissions.json
-  await action.sync({
-    githubToken,
-    owner,
-    repo,
-    leetcodeCSRFToken,
-    leetcodeSession,
-    filterDuplicateSecs,
-    destinationFolder,
-    verbose,
-    commitHeader,
-  });
+  if (SYNC) {
+    // first write to processed-submissions.jsons
+    await action.sync({
+      githubToken,
+      owner,
+      repo,
+      leetcodeCSRFToken,
+      leetcodeSession,
+      filterDuplicateSecs,
+      destinationFolder,
+      verbose,
+      commitHeader,
+    });
+  }
 
   // then read from processed-submissions.json and generate the markdown files
   await action.syncFromProcessedSubmissions({
