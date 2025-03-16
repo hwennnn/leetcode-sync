@@ -61,7 +61,4 @@ async function main() {
 
 main().catch((error) => {
   action.log(error.stack);
-  if (!TEST_MODE) {
-    core.setFailed(error);
-  }
 });

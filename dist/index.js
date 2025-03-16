@@ -2862,15 +2862,21 @@ async function commit(params) {
   // Save md file
   const solutionFileName = `${fullName}.md`
   const solutionPath = path.join(fullPath, solutionFileName);
-  try {
-    await fs.access(solutionPath);
-    log(`Skipping existing solution for ${normalizedName}`);
-    return;
-  } catch {
-    // File doesn't exist, continue with writing
-    await fs.writeFile(solutionPath, generatedContent);
-    log(`Saved solution for ${normalizedName}`);
-  }
+
+  // SKIP CHECKING FOR EXISTING SOLUTION
+  // try {
+  //   await fs.access(solutionPath);
+  //   log(`Skipping existing solution for ${normalizedName}`);
+  //   return;
+  // } catch {
+  //   // File doesn't exist, continue with writing
+  // await fs.writeFile(solutionPath, generatedContent);
+  // log(`Saved solution for ${normalizedName}`);
+  // }
+
+  // Write to file
+  await fs.writeFile(solutionPath, generatedContent);
+  log(`Saved solution for ${normalizedName}`);
 }
 
 async function getQuestionData(titleSlug, leetcodeSession, csrfToken) {
@@ -2923,7 +2929,7 @@ function addToSubmissions(params) {
   } = params;
 
   for (const submission of response.data.data.submissionList.submissions) {
-    submissionTimestamp = Number(submission.timestamp);
+    submissionTimestamp = Number(submission.timestamp) * 1000;
     if (submissionTimestamp <= lastTimestamp) {
       return false;
     }
@@ -2982,6 +2988,7 @@ async function sync(inputs) {
   let offset = 0;
   const submissions = [];
   const submissions_dict = {};
+  let firstSubmissionTimestamp = null;
 
   do {
     log(`Getting submission from LeetCode, offset ${offset}`);
@@ -3044,8 +3051,7 @@ async function sync(inputs) {
     response = await getSubmissions(maxRetries);
 
     if (offset === 0) {
-      const recordedLastTimestamp = Number(response.data.data.submissionList.submissions[0].timestamp * 1000);
-      await updateLastTimestamp(recordedLastTimestamp);
+      firstSubmissionTimestamp = Number(response.data.data.submissionList.submissions[0].timestamp * 1000);
     }
 
     if (
@@ -3063,6 +3069,9 @@ async function sync(inputs) {
     offset += 20;
   } while (response.data.data.submissionList.hasNext);
 
+
+  await updateLastTimestamp(firstSubmissionTimestamp);
+
   const processedSubmissions = await retrieveProcessedSubmissions();
   log(`Syncing ${submissions.length} submissions...`);
 
@@ -3072,6 +3081,7 @@ async function sync(inputs) {
       leetcodeSession,
       leetcodeCSRFToken
     );
+    log(`index: ${i}, submission: ${submission}`)
 
     if (submission === null) {
       // Skip this submission if it is null (locked problem)
@@ -7903,9 +7913,6 @@ async function main() {
 
 main().catch((error) => {
   action.log(error.stack);
-  if (!TEST_MODE) {
-    core.setFailed(error);
-  }
 });
 
 })();
