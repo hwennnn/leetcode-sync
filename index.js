@@ -1,12 +1,15 @@
 const action = require("./src/action");
 const config = require("./src/test_config");
+const core = require("@actions/core");
+const github = require("@actions/github");
 
 const TEST_MODE = process.argv.includes("test");
 const SYNC = process.argv.includes("sync");
 
 async function main() {
   let githubToken, owner, repo, leetcodeCSRFToken, leetcodeSession;
-  let filterDuplicateSecs, destinationFolder;
+  let filterDuplicateSecs, destinationFolder, verbose, commitHeader;
+
   if (TEST_MODE) {
     if (
       !config.GITHUB_TOKEN ||
@@ -24,18 +27,35 @@ async function main() {
     leetcodeSession = config.LEETCODE_SESSION;
     filterDuplicateSecs = config.FILTER_DUPLICATE_SECS;
     destinationFolder = config.DESTINATION_FOLDER;
-    verbose = config.VERBOSE.toString(); // Convert to string to match core.getInput('verbose') return type
+    verbose = config.VERBOSE.toString();
     commitHeader = config.COMMIT_HEADER;
   } else {
-    githubToken = core.getInput("github-token");
-    owner = context.repo.owner;
-    repo = context.repo.repo;
-    leetcodeCSRFToken = core.getInput("leetcode-csrf-token");
-    leetcodeSession = core.getInput("leetcode-session");
-    filterDuplicateSecs = core.getInput("filter-duplicate-secs");
-    destinationFolder = core.getInput("destination-folder");
-    verbose = core.getInput("verbose");
-    commitHeader = core.getInput("commit-header");
+    // Check if we're running in GitHub Actions
+    const isGitHubActions = process.env.GITHUB_ACTIONS === 'true';
+
+    if (isGitHubActions) {
+      githubToken = core.getInput("github-token");
+      const context = github.context;
+      owner = context.repo.owner;
+      repo = context.repo.repo;
+    } else {
+      // Local execution
+      if (!process.env.GITHUB_TOKEN) {
+        throw new Error("GITHUB_TOKEN environment variable is required for local execution");
+      }
+      if (!process.env.GITHUB_REPOSITORY) {
+        throw new Error("GITHUB_REPOSITORY environment variable is required for local execution (format: owner/repo)");
+      }
+      githubToken = process.env.GITHUB_TOKEN;
+      [owner, repo] = process.env.GITHUB_REPOSITORY.split("/");
+    }
+
+    leetcodeCSRFToken = core.getInput("leetcode-csrf-token") || process.env.LEETCODE_CSRF_TOKEN;
+    leetcodeSession = core.getInput("leetcode-session") || process.env.LEETCODE_SESSION;
+    filterDuplicateSecs = core.getInput("filter-duplicate-secs") || process.env.FILTER_DUPLICATE_SECS;
+    destinationFolder = core.getInput("destination-folder") || process.env.DESTINATION_FOLDER;
+    verbose = core.getInput("verbose") || process.env.VERBOSE;
+    commitHeader = core.getInput("commit-header") || process.env.COMMIT_HEADER;
   }
 
   if (SYNC) {
