@@ -12392,6 +12392,7 @@ async function getQuestionData(titleSlug, leetcodeSession, csrfToken) {
   const graphql = JSON.stringify({
     query: `query getQuestionDetail($titleSlug: String!) {
       question(titleSlug: $titleSlug) {
+        questionId
         content
         difficulty
         questionTitleSlug
