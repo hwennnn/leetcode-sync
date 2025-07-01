@@ -12347,6 +12347,7 @@ async function commit(params) {
   const problemDescription = questionData["content"]
   const problemDifficulty = questionData["difficulty"]
   const problemTopics = questionData["topicTags"]
+  const contestInfo = questionData["contest"]
   const fullName = `${problemID}-${normalizedName}`;
 
   if (fullName === "2917-find-the-k-or-of-an-array") {
@@ -12362,7 +12363,8 @@ async function commit(params) {
     problemDifficulty,
     problemTopics,
     createdAt,
-    submissions
+    submissions,
+    contestInfo
   )
 
   // Save md file
@@ -12767,7 +12769,8 @@ async function generateContent(
     problemDifficulty,
     problemTopics,
     createdAt,
-    submissions
+    submissions,
+    contestInfo,
 ) {
     let contents = "";
     try {
@@ -12781,7 +12784,16 @@ async function generateContent(
 
         const difficultyTag = `leetcode-${problemDifficulty.toLowerCase()}`;
 
-        const formattedTopicsTags = [difficultyTag, ...problemTopics.map(topic => topic.slug)]
+        const contestName = contestInfo?.basicInfo?.titleSlug
+
+        const tags = [difficultyTag, ...problemTopics.map(topic => topic.slug)]
+
+        if (contestName) {
+            tags.push(contestName.replace("leetcode-", ""))
+            tags.push("contest-question")
+        }
+
+        const formattedTopicsTags = tags
             .map(topic => `  - ${topic}`)
             .join('\n');
         contents = contents.replace("{PROBLEM_TOPICS}", "\n" + formattedTopicsTags);

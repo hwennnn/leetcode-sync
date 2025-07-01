@@ -147,6 +147,7 @@ async function commit(params) {
   const problemDescription = questionData["content"]
   const problemDifficulty = questionData["difficulty"]
   const problemTopics = questionData["topicTags"]
+  const contestInfo = questionData["contest"]
   const fullName = `${problemID}-${normalizedName}`;
 
   if (fullName === "2917-find-the-k-or-of-an-array") {
@@ -162,7 +163,8 @@ async function commit(params) {
     problemDifficulty,
     problemTopics,
     createdAt,
-    submissions
+    submissions,
+    contestInfo
   )
 
   // Save md file
